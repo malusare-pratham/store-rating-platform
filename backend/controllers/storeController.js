@@ -4,7 +4,8 @@ const { sendSuccess, sendError, sendPaginated } = require("../utils/response");
 // GET /api/stores - For normal users browsing stores
 exports.getStores = async (req, res) => {
   const { search = "", sortBy = "name", sortOrder = "ASC", page = 1, limit = 12 } = req.query;
-  const userId = req.user?.id;
+  const userId = Number.parseInt(req.user?.id, 10);
+  const hasUser = Number.isInteger(userId);
 
   const validSortFields = ["name", "address", "avg_rating"];
   const safeSort = validSortFields.includes(sortBy) ? sortBy : "name";
@@ -24,24 +25,28 @@ exports.getStores = async (req, res) => {
       `SELECT COUNT(*) AS total FROM stores s ${whereClause}`, params
     );
 
-    const userRatingJoin = userId
-      ? `LEFT JOIN ratings ur ON s.id = ur.store_id AND ur.user_id = ${parseInt(userId)}`
+    const userRatingJoin = hasUser
+      ? "LEFT JOIN ratings ur ON s.id = ur.store_id AND ur.user_id = ?"
       : "";
-    const userRatingSelect = userId ? ", ur.rating AS user_rating, ur.id AS user_rating_id" : ", NULL AS user_rating, NULL AS user_rating_id";
+    const userRatingSelect = hasUser ? ", ur.rating AS user_rating, ur.id AS user_rating_id" : ", NULL AS user_rating, NULL AS user_rating_id";
+    const sortCol = safeSort === "avg_rating" ? "avg_rating" : `s.${safeSort}`;
 
     const [stores] = await pool.query(
       `SELECT s.id, s.name, s.email, s.address,
-              ROUND(IFNULL(AVG(r.rating), 0), 1) AS avg_rating,
-              COUNT(r.id) AS total_ratings
+              IFNULL(rs.avg_rating, 0) AS avg_rating,
+              IFNULL(rs.total_ratings, 0) AS total_ratings
               ${userRatingSelect}
        FROM stores s
-       LEFT JOIN ratings r ON s.id = r.store_id
+       LEFT JOIN (
+         SELECT store_id, ROUND(AVG(rating), 1) AS avg_rating, COUNT(*) AS total_ratings
+         FROM ratings
+         GROUP BY store_id
+       ) rs ON s.id = rs.store_id
        ${userRatingJoin}
        ${whereClause}
-       GROUP BY s.id
-       ORDER BY ${safeSort} ${safeOrder}
+       ORDER BY ${sortCol} ${safeOrder}
        LIMIT ? OFFSET ?`,
-      [...params, parseInt(limit), offset]
+      [...(hasUser ? [userId] : []), ...params, parseInt(limit), offset]
     );
 
     sendPaginated(res, stores, total, page, limit, "Stores fetched.");

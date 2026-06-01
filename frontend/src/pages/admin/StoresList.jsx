@@ -14,8 +14,8 @@ const StoresList = () => {
   const [pagination, setPagination] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("created_at");
-  const [sortOrder, setSortOrder] = useState("DESC");
+  const [sortBy, setSortBy] = useState("name");
+  const [sortOrder, setSortOrder] = useState("ASC");
   const [page, setPage] = useState(1);
 
   const debouncedSearch = useDebounce(search, 400);

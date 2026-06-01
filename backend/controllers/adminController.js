@@ -106,11 +106,11 @@ exports.addUser = async (req, res) => {
 
 // GET /api/admin/stores
 exports.getAllStores = async (req, res) => {
-  const { search = "", sortBy = "created_at", sortOrder = "DESC", page = 1, limit = 10 } = req.query;
+  const { search = "", sortBy = "name", sortOrder = "ASC", page = 1, limit = 10 } = req.query;
 
-  const validSortFields = ["name", "email", "address", "rating", "created_at"];
-  const safeSort = validSortFields.includes(sortBy) ? sortBy : "created_at";
-  const safeOrder = sortOrder.toUpperCase() === "ASC" ? "ASC" : "DESC";
+  const validSortFields = ["name", "email", "address", "rating"];
+  const safeSort = validSortFields.includes(sortBy) ? sortBy : "name";
+  const safeOrder = sortOrder.toUpperCase() === "DESC" ? "DESC" : "ASC";
 
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
@@ -131,15 +131,18 @@ exports.getAllStores = async (req, res) => {
     const sortCol = safeSort === "rating" ? "avg_rating" : `s.${safeSort}`;
 
     const [stores] = await pool.query(
-      `SELECT s.id, s.name, s.email, s.address, s.created_at,
+      `SELECT s.id, s.name, s.email, s.address,
               u.name AS owner_name,
-              ROUND(IFNULL(AVG(r.rating), 0), 1) AS avg_rating,
-              COUNT(r.id) AS total_ratings
+              IFNULL(rs.avg_rating, 0) AS avg_rating,
+              IFNULL(rs.total_ratings, 0) AS total_ratings
        FROM stores s
        LEFT JOIN users u ON s.owner_id = u.id
-       LEFT JOIN ratings r ON s.id = r.store_id
+       LEFT JOIN (
+         SELECT store_id, ROUND(AVG(rating), 1) AS avg_rating, COUNT(*) AS total_ratings
+         FROM ratings
+         GROUP BY store_id
+       ) rs ON s.id = rs.store_id
        ${whereClause}
-       GROUP BY s.id
        ORDER BY ${sortCol} ${safeOrder}
        LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), offset]
